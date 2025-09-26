@@ -29,16 +29,17 @@ pip install -r requirements.txt
 ## Project Structure
 
 project/
-├── configs.py # Environment & algorithm configs
-├── models.py # Agent definitions: DQN, BQMS, BootstrapDQN
-├── utils.py # Helper functions (make_env, etc.)
-├── train_dqn.py # DQN training CLI
-├── train_bqms.py # BQMS training CLI
-├── train_bootstrap.py # BootstrapDQN training CLI
-├── plot_cli.py # Plotting & PDF visualization CLI
-├── plots.py # Plotting functions
-├── results/ # Directory to save benchmarks and plots
-└── README.md
+├─ configs.py           # Environment & algorithm configurations
+├─ models.py            # Agent implementations: DQN, BQMS, BootstrapDQN
+├─ utils.py             # Helper functions (e.g., make_env, seeding)
+├─ train_dqn.py         # CLI to train DQN agents
+├─ train_bqms.py        # CLI to train BQMS agents
+├─ train_bootstrap.py   # CLI to train BootstrapDQN agents
+├─ plot_cli.py          # CLI to plot results and generate PDFs
+├─ plots.py             # Plotting functions
+├─ results/             # Stores benchmark results and generated plots
+└─ README.md            # Project overview and instructions
+
 
 
 ## Training Agents
