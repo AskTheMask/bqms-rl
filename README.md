@@ -27,7 +27,7 @@ pip install -r requirements.txt
 ```
 
 ## Project Structure
-
+```
 project/
 ├─ configs.py           # Environment & algorithm configurations
 ├─ models.py            # Agent implementations: DQN, BQMS, BootstrapDQN
@@ -39,7 +39,7 @@ project/
 ├─ plots.py             # Plotting functions
 ├─ results/             # Stores benchmark results and generated plots
 └─ README.md            # Project overview and instructions
-
+```
 
 
 ## Training Agents
