@@ -1,15 +1,20 @@
+"""
+agent.py
+
+Defines the Agent class for training and evaluating reinforcement learning agents
+across different algorithms such as DQN, OPS-VBQN, and BootstrapDQN.
+"""
+
 from memory import ReplayMemory, Transition
 from utils import encode_state
 from data_handler import save_seed_data, save_model, load_model
 import gymnasium as gym
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import numpy as np
 import random
 from tqdm import tqdm
-from collections import deque, namedtuple, Counter
-from typing import Any, List
+from typing import List, Tuple, Optional, Any
 
 class Agent:
 
@@ -30,10 +35,10 @@ class Agent:
                  env_name: str = None
     ):
         """
-        Initializes the agent with hyperparameters, model, and environment.
+        Initializes a reinforcement learning agent.
 
-        Sets learning rate, exploration schedule, replay memory size, model architecture,
-        and prepares placeholders for optimizer and environment.
+        Sets up the agent's hyperparameters, neural network model, optimizer placeholders,
+        exploration schedule, and replay memory for training in the given environment.
         """
          
         self.alpha = alpha                                  # Learning rate
@@ -56,19 +61,55 @@ class Agent:
 
     def linear_schedule(self, start_e: float, end_e: float, duration: int, t: int) -> float:
         """
-        Computes the epsilon value linearly annealed from start to end over duration steps.
+        Computes the linearly annealed epsilon (exploration rate) for epsilon-greedy action selection.
 
-        Returns the exploration rate at time step t.
+        The epsilon value starts at `start_e` and decreases linearly to `end_e` over `duration` steps.
+        After `duration` steps, epsilon remains constant at `end_e`. This schedule is typically used 
+        to gradually reduce exploration in reinforcement learning agents.
+
+        Args:
+            start_e (float): Initial exploration rate at the start of training (usually close to 1.0).
+            end_e (float): Final exploration rate after annealing (usually a small value like 0.05).
+            duration (int): Number of time steps over which epsilon is linearly annealed.
+            t (int): Current time step for which to compute epsilon.
+
+        Returns:
+            float: The exploration rate (epsilon) at time step `t`, clipped to not go below `end_e`.
         """
 
         slope = (end_e - start_e) / duration
         return max(slope * t + start_e, end_e)
  
 
-    def optimize(self, mini_batch, policy_dqn, target_dqn, head_idx=None) -> None:
+    def optimize(self, 
+                 mini_batch: List[Tuple[torch.Tensor, int, torch.Tensor, float, bool, Any]], 
+                 policy_dqn: nn.Module, 
+                 target_dqn: nn.Module, 
+                 head_idx: Optional[int] = None
+        ) -> None:
         """
-        Performs a single optimization step on the policy network using a mini-batch.
-        Assumes mini_batch is already filtered by head if head_idx is provided.
+        Performs a single optimization step on the policy network using a mini-batch of transitions.
+
+        If the network is a bootstrapped DQN with multiple heads, `head_idx` selects which head to update.
+        Otherwise, the standard DQN head is used. The function computes the TD target and performs a 
+        gradient descent step to minimize the loss between current Q-values and target Q-values.
+
+        Args:
+            mini_batch (List[Tuple[torch.Tensor, int, torch.Tensor, float, bool, Any]]): 
+                A batch of transitions, each containing:
+                    - state (torch.Tensor): The current state.
+                    - action (int): The action taken.
+                    - next_state (torch.Tensor): The resulting next state.
+                    - reward (float): The reward received after taking the action.
+                    - terminated (bool): Whether the episode ended after this transition.
+                    - info (Any): Additional info (ignored in optimization).
+            policy_dqn (nn.Module): The DQN policy network to be optimized.
+            target_dqn (nn.Module): The target DQN network used for computing target Q-values.
+            head_idx (Optional[int], default=None): Index of the bootstrap head to use. 
+                If None, the standard DQN is used.
+
+        Returns:
+            None
         """
 
         # Unpack transitions — mask isn't needed here because filtering already done
@@ -99,10 +140,24 @@ class Agent:
         loss.backward()
         self.optimizer.step()
 
-    def create_networks(self, model_class, num_states, num_actions, bootstrap_heads=None):
+    def create_networks(self, model_class: type, num_states: int, num_actions: int, bootstrap_heads: Optional[int] = None):
         """
-        Initializes policy and target networks according to the model and special params.
-        Ensures target network weights are synced with policy.
+        Initializes the policy and target networks for training.
+
+        If `model_class` is `BootstrapDQN`, `bootstrap_heads` must be provided and both networks
+        will have the specified number of bootstrap heads. Otherwise, standard DQN networks are created.
+
+        The target network weights are synchronized with the policy network upon creation.
+
+        Args:
+            model_class (type): The neural network class to instantiate (e.g., DQN or BootstrapDQN).
+            num_states (int): Number of input features (state dimensions) for the network.
+            num_actions (int): Number of possible actions (output dimensions) for the network.
+            bootstrap_heads (int, optional): Number of bootstrap heads if using `BootstrapDQN`. 
+                                            Required for bootstrap networks. Defaults to None.
+
+        Returns:
+            tuple: A tuple `(policy_dqn, target_dqn)` of the initialized networks.
         """
 
         if model_class.__name__ == "BootstrapDQN":
@@ -124,6 +179,27 @@ class Agent:
         return policy_dqn, target_dqn
     
     def get_env_dimensions(self):
+        """
+        Returns key environment dimensions required for the agent.
+
+        Determines the number of states, number of actions, and returns the 
+        observation space object from the environment.
+
+        Supports:
+            - Discrete observation spaces: returns the number of discrete states.
+            - Box observation spaces: 
+                - For flat vectors: returns the vector length.
+                - For images (3D arrays): returns the full shape (C, H, W).
+            - Discrete action spaces: returns the number of possible actions.
+
+        Raises:
+            NotImplementedError: If the environment uses an unsupported observation or action space type.
+
+        Returns:
+            num_states (int or tuple of ints): Number of states or observation shape.
+            num_actions (int): Number of discrete actions.
+            obs_space (gym.Space): Original observation space object.
+        """
         env = self.env
         obs_space = env.observation_space
         action_space = env.action_space
@@ -150,8 +226,48 @@ class Agent:
 
         return num_states, num_actions, obs_space
     
-    def select_action(self, state, policy_dqn, step, max_steps, num_actions, 
-                  num_samples=None, bootstrap_head=None, eval_mode=False):
+    def select_action(self, 
+                      state: torch.Tensor, 
+                      policy_dqn: nn.Module, 
+                      step: int, 
+                      max_steps: int, 
+                      num_actions: int, 
+                      num_samples: Optional[int] = None, 
+                      bootstrap_head: Optional[int] = None, 
+                      eval_mode: bool = False
+        ) -> int:
+        """
+        Selects an action using an epsilon-greedy strategy based on the policy network.
+
+        During training:
+            - With probability epsilon, a random action is selected (exploration).
+            - Otherwise, the greedy action is chosen from the policy network (exploitation).
+            - Epsilon is linearly annealed from start_e to end_e over the training steps.
+
+        During evaluation (`eval_mode=True`), actions are always chosen greedily.
+
+        Special handling for specific algorithms:
+            - OPS-VBQN: requires `num_samples` to generate multiple posterior samples; the action
+            is selected by taking the argmax over the sampled Q-values.
+            - BootstrapDQN: requires `bootstrap_head` to select the head of the ensemble
+            from which to compute Q-values.
+
+        Args:
+            state (torch.Tensor): Current state, expected shape depends on environment.
+            policy_dqn (torch.nn.Module): The policy network used to estimate Q-values.
+            step (int): Current training step, used for epsilon annealing.
+            max_steps (int): Total number of training steps for annealing.
+            num_actions (int): Number of discrete actions available in the environment.
+            num_samples (int, optional): Number of posterior samples (required for OPS-VBQN).
+            bootstrap_head (int, optional): Head index to use for BootstrapDQN action selection.
+            eval_mode (bool, optional): If True, actions are chosen greedily without exploration.
+
+        Returns:
+            int: Selected action index.
+        
+        Raises:
+            ValueError: If required arguments are missing for OPS-VBQN or BootstrapDQN.
+        """
         model_name = self.model.name()
         
         epsilon = self.linear_schedule(self.start_e, self.end_e, max_steps * self.exploration_fraction, step)
@@ -160,9 +276,9 @@ class Agent:
 
         if greedy:
             with torch.no_grad():
-                if model_name == "BQMS":
+                if model_name == "OPS-VBQN":
                     if num_samples is None:
-                        raise ValueError("num_samples must be specified for BQMS action selection.")
+                        raise ValueError("num_samples must be specified for OPS-VBQN action selection.")
                     batched_states = state.expand(num_samples, *state.shape)
                     action_samples = policy_dqn(batched_states)
                     best_index = action_samples.argmax().item()
@@ -180,7 +296,27 @@ class Agent:
         # Random action (exploration)
         return self.env.action_space.sample()
 
-    def seed_everything(self, seed: int):
+    def seed_everything(self, seed: int) -> None:
+        """
+        Set the random seed for reproducibility across Python, NumPy, PyTorch, and the environment.
+
+        This function ensures that experiments are deterministic to the extent possible by controlling
+        all sources of randomness, including:
+        - Python's `random` module
+        - NumPy random generator
+        - PyTorch CPU and CUDA random generators
+        - The environment's random number generators for actions and observations
+
+        Parameters
+        ----------
+        seed : int
+            The integer seed to use for all random number generators.
+        
+        Returns
+        -------
+        None
+        """
+
         # Seed Python, NumPy, and PyTorch
         random.seed(seed)
         np.random.seed(seed)
@@ -193,15 +329,37 @@ class Agent:
         self.env.observation_space.seed(seed)
 
 
-    def train(self, max_steps: int, max_episodes: int, reward_limit: int, seed: int, num_samples: int = None, bootstrap_heads: int = None) -> np.ndarray:
+    def train(
+            self, 
+            max_steps: int, 
+            max_episodes: int, 
+            reward_limit: int, 
+            seed: int, 
+            num_samples: Optional[int] = None, 
+            bootstrap_heads: Optional[int] = None
+        ) -> Tuple[np.ndarray, int, float]:
         """
-        Trains the agent on the environment for a given number of steps.
+        Train the agent on the environment for a given number of steps.
 
-        Uses epsilon-greedy action selection, experience replay, and target network updates.
+        Implements epsilon-greedy exploration, experience replay, and target network updates.
+        Tracks episodic rewards, cumulative regret, and the number of episodes required to
+        reach a reward threshold. Saves the trained model upon completion.
 
-        Returns an array of episodic rewards recorded during training.
+        Args:
+            max_steps (int): Total number of environment steps to train for.
+            max_episodes (int): Maximum number of episodes to run during training.
+                Used to calculate cumulative regret and to check if the reward threshold was reached.
+            reward_limit (int): Reward threshold used to determine when the task is considered solved.
+            seed (int): Random seed for reproducibility.
+            num_samples (Optional[int], default=None): Number of samples for OPS-VBQN action selection (if applicable).
+            bootstrap_heads (Optional[int], default=None): Number of bootstrap heads for BootstrapDQN (if applicable).
 
-        Saves the trained model and episodic rewards to disk.
+        Returns:
+            tuple[np.ndarray, int, float]: A tuple containing:
+                - episodic_rewards (np.ndarray): Array of total rewards collected per episode.
+                - episodes_to_solve (int): Number of episodes required to reach the reward limit.
+                If the reward limit is not reached, returns `max_episodes`.
+                - final_cumulative_regret (float): Cumulative regret up to the episode when the task was considered solved.
         """
 
         # Get the number of states and actions
@@ -316,12 +474,35 @@ class Agent:
 
     
 
-    def evaluate(self, episodes: int, seed: int, num_samples: int = None, bootstrap_heads: int = None) -> float:
+    def evaluate(
+            self, 
+            episodes: int, 
+            seed: int, 
+            num_samples: Optional[int] = None, 
+            bootstrap_heads: Optional[int] = None
+        ) -> float:
         """
-        Evaluates the trained policy over a specified number of episodes with a given number of posterior samples.
+        Train the agent on the environment for a given number of steps.
 
-        Executes the learned policy without exploration and returns the average reward over all episodes.
+        Implements epsilon-greedy exploration, experience replay, and target network updates.
+        Tracks episodic rewards, cumulative regret, and the number of episodes required to
+        reach a reward threshold. Saves the trained model upon completion.
 
+        Args:
+            max_steps (int): Total number of environment steps to train for.
+            max_episodes (int): Maximum number of episodes to run during training.
+                Used to calculate cumulative regret and to check if the reward threshold was reached.
+            reward_limit (int): Reward threshold used to determine when the task is considered solved.
+            seed (int): Random seed for reproducibility.
+            num_samples (Optional[int], default=None): Number of samples for OPS-VBQN action selection (if applicable).
+            bootstrap_heads (Optional[int], default=None): Number of bootstrap heads for BootstrapDQN (if applicable).
+
+        Returns:
+            Tuple[np.ndarray, int, float]: A tuple containing:
+                - episodic_rewards (np.ndarray): Array of total rewards collected per episode.
+                - episodes_to_solve (int): Number of episodes required to reach the reward limit.
+                If the reward limit is not reached, returns `max_episodes`.
+                - final_cumulative_regret (float): Cumulative regret up to the episode when the task was considered solved.
         """
 
         # Get the number of states and actions
@@ -364,30 +545,57 @@ class Agent:
 
 
 
-    def benchmarks(self, max_steps: int, episodes: int, max_episodes: int, reward_limit: int, num_samples: int, bootstrap_heads: int, seeds: List[int]) -> tuple[float, float]:
+    def benchmarks(
+            self, 
+            seeds: List[int],
+            max_steps: int, 
+            episodes: int, 
+            max_episodes: int, 
+            reward_limit: int, 
+            num_samples: Optional[int] = None, 
+            bootstrap_heads: Optional[int] = None 
+            ) -> None:
         """
-        Runs a benchmark test on the environment specified by self, training the agent and the evaluating the agent 
-        across multiple seeds. Returns the average episodic return and standard deviation for each seed as the benchmark result.
+        Runs benchmark training and evaluation across multiple random seeds.
+
+        For each seed, trains the agent using the specified environment and hyperparameters,
+        evaluates the learned policy, and saves episodic returns and benchmark results.
+
+        Args:
+            seeds (List[int]): List of random seeds to run the benchmark across.
+            max_steps (int): Maximum number of training steps per seed.
+            episodes (int): Number of episodes to use for evaluation.
+            max_episodes (int): Maximum number of episodes considered for cumulative regret calculation.
+            reward_limit (int): Reward threshold for determining task success.
+            num_samples (Optional[int], default=None): Number of posterior samples for OPS-VBQN (if applicable).
+            bootstrap_heads (Optional[int], default=None): Number of bootstrap heads for BootstrapDQN (if applicable).
+
+        Returns:
+            None
         """
-        run = 1
-        for seed in seeds:
-            episodic_return, episode_number, cumulative_regret = self.train(max_steps=max_steps, 
-                                                                            seed=seed, 
-                                                                            max_episodes=max_episodes, 
-                                                                            reward_limit=reward_limit, 
-                                                                            num_samples=num_samples, 
-                                                                            bootstrap_heads=bootstrap_heads)
+        for run, seed in enumerate(seeds, start=1):
+            train_kwargs = {
+                "max_steps": max_steps,
+                "seed": seed,
+                "max_episodes": max_episodes,
+                "reward_limit": reward_limit,
+                "num_samples": num_samples,
+                "bootstrap_heads": bootstrap_heads,
+            }
+
+            episodic_return, episodes_to_solve, cumulative_regret = self.train(**train_kwargs)
             average_episodic_return = self.evaluate(episodes, seed, num_samples, bootstrap_heads)
+
             print(f"Iteration {run}: Average episodic return: {average_episodic_return:.2f}")
+
             save_seed_data(
-                env_name = self.env_name, 
-                alg_name = self.model.name(), 
-                seed = seed, 
-                returns = episodic_return, 
-                benchmark_score = average_episodic_return,
+                env_name=self.env_name,
+                alg_name=self.model.name(),
+                seed=seed,
+                returns=episodic_return,
+                benchmark_score=average_episodic_return,
                 cumulative_regret=cumulative_regret,
-                episodes_to_solve=episode_number, 
-                posterior_samples = num_samples, 
-                bootstrap_heads = bootstrap_heads
+                episodes_to_solve=episodes_to_solve,
+                posterior_samples=num_samples,
+                bootstrap_heads=bootstrap_heads,
             )
-            run += 1

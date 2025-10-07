@@ -1,8 +1,64 @@
+"""
+configs.py
+
+Defines environment- and algorithm-specific configuration settings for the
+Reinforcement Learning Benchmark Suite. Handles creation of directory
+structures for saving models and results, and provides a helper function
+to instantiate agents with environment-appropriate hyperparameters.
+
+Contents:
+    - setup_project_dirs: Creates folder hierarchy for models and benchmark data.
+    - ENVIRONMENTS / ALGORITHMS: Lists of supported environments and algorithms.
+    - ENV_CONFIG: Environment-specific benchmarking and training limits.
+    - COMMON_CONFIG / ENV_SPECIFIC: Default and environment-specific agent configs.
+    - create_agent: Utility to initialize an Agent with proper settings.
+
+Example:
+    from configs import create_agent, ENVIRONMENTS
+    agent = create_agent("CartPole-v1", DQN, make_env("CartPole-v1"))
+"""
+
+
 import os
 from agent import Agent
+from typing import List, Optional, Type
+import torch
+import gymnasium as gym
 
-def setup_project_dirs(env_names, algo_names, posterior_samples=None, bootstrap_heads=None,
-                       base_model_dir="models", base_data_dir="data"):
+def setup_project_dirs(
+        env_names: List[str], 
+        algo_names: List[str], 
+        posterior_samples: Optional[List[int]] = None, 
+        bootstrap_heads: Optional[List[int]] = None,
+        base_model_dir: Optional[str] = "models", 
+        base_data_dir: Optional[str] = "data"
+        ) -> None:
+    
+    """
+    Creates a structured directory hierarchy for saving models and benchmark data.
+
+    For each environment–algorithm combination, subfolders are created under the
+    model and data directories. If `OPS-VBQN` or `BootstrapDQN` are used, their
+    respective posterior sample or bootstrap head configurations are also included
+    in the directory structure.
+
+    Args:
+        env_names (list[str]): List of environment names (e.g., ["CartPole-v1", "LunarLander-v3"]).
+        algo_names (list[str]): List of algorithm names (e.g., ["DQN", "OPS-VBQN", "BootstrapDQN"]).
+        posterior_samples (list[int], optional): Posterior sample sizes for OPS-VBQN runs.
+        bootstrap_heads (list[int], optional): Bootstrap head counts for BootstrapDQN runs.
+        base_model_dir (str, optional, default="models"): Root directory where trained models are saved.
+        base_data_dir (str, optional, default="data"): Root directory where benchmark results are stored.
+
+    Notes:
+        - Existing directories are preserved (created only if missing).
+        - Nested folders are automatically generated for algorithm-specific configurations.
+
+    Returns:
+        None
+    """
+
+
     os.makedirs(base_model_dir, exist_ok=True)
     os.makedirs(base_data_dir, exist_ok=True)
 
@@ -14,7 +70,7 @@ def setup_project_dirs(env_names, algo_names, posterior_samples=None, bootstrap_
         os.makedirs(env_model_path, exist_ok=True)
 
         for algo in algo_names:
-            if algo == "BQMS" and posterior_samples:
+            if algo == "OPS-VBQN" and posterior_samples:
                 for ps in posterior_samples:
                     os.makedirs(os.path.join(env_model_path, algo, f"post_{ps}"), exist_ok=True)
                     os.makedirs(os.path.join(env_data_path, algo, f"post_{ps}"), exist_ok=True)
@@ -26,12 +82,12 @@ def setup_project_dirs(env_names, algo_names, posterior_samples=None, bootstrap_
                 os.makedirs(os.path.join(env_model_path, algo), exist_ok=True)
                 os.makedirs(os.path.join(env_data_path, algo), exist_ok=True)
 
-    print("✅ Folder structure ready!")
+    print("Folder structure ready!")
 
 
 # List of environments and algorithms
 ENVIRONMENTS = ["CartPole-v1", "LunarLander-v3", "Taxi-v3", "Acrobot-v1"]
-ALGORITHMS = ["DQN", "BQMS", "BootstrapDQN"]
+ALGORITHMS = ["DQN", "OPS-VBQN", "BootstrapDQN"]
 ENV_CONFIG = {
     "CartPole-v1": {
         "upper": 600,
@@ -40,8 +96,7 @@ ENV_CONFIG = {
         "max_episodes": 3600,
         "max_steps": 500000,
         "benchmark_episodes": 50,
-        "reward_limit": 500,
-        "posterior_sample_list": [1, 50, 100, 200, 300, 400]
+        "reward_limit": 500
     },
     "LunarLander-v3": {
         "upper": 350,
@@ -50,8 +105,7 @@ ENV_CONFIG = {
         "max_episodes": 5600,
         "max_steps": 1800000,
         "benchmark_episodes": 50,
-        "reward_limit": 260,
-        "posterior_sample_list": [1, 200, 400, 600]
+        "reward_limit": 260
     },
     "Taxi-v3": {
         "upper": 100,
@@ -60,8 +114,7 @@ ENV_CONFIG = {
         "max_episodes": 1200,
         "max_steps": 150000,
         "benchmark_episodes": 50,
-        "reward_limit": 8,
-        "posterior_sample_list": [1, 50, 100, 200, 300, 400]
+        "reward_limit": 8   
     },
     "Acrobot-v1": {
         "upper": -50,
@@ -70,8 +123,7 @@ ENV_CONFIG = {
         "max_episodes": 1500,
         "max_steps": 500000,
         "benchmark_episodes": 50,
-        "reward_limit": -85,
-        "posterior_sample_list": [1, 200, 400, 600, 800, 1000]
+        "reward_limit": -85    
     }
 }
 
@@ -121,7 +173,21 @@ ENV_SPECIFIC = {
 }
 
 
-def create_agent(env_name, model_class, env_instance):
+def create_agent(env_name: str, model_class: Type[torch.nn.Module], env_instance: gym.env) -> Agent:
+    """
+    Instantiates an Agent with environment-specific configuration.
+
+    Combines common and environment-specific hyperparameters, creates the Agent,
+    and assigns the provided environment instance to it.
+
+    Args:
+        env_name (str): Name of the environment (e.g., "CartPole-v1").
+        model_class (Type[torch.nn.Module]): The neural network class to use for the agent's policy.
+        env_instance (gym.Env): An initialized Gym environment instance for the agent.
+
+    Returns:
+        Agent: A fully initialized agent with the specified model and environment assigned.
+    """
     config = {**COMMON_CONFIG, **ENV_SPECIFIC[env_name]}
     agent = Agent(env_name = env_name, model=model_class, **config)
     agent.env = env_instance

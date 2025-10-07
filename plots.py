@@ -1,10 +1,27 @@
+"""
+plots.py
+
+Functions for visualizing Reinforcement Learning experiment results, including:
+- Learning curves over episodes
+- Posterior distribution metrics (e.g., rewards, uncertainties)
+- Boxplots for performance comparison
+- Exporting results tables as LaTeX PDFs
+
+This module is intended to support analysis and presentation of OPS-VBQN,
+BootstrapDQN, or other RL algorithms' results.
+
+Notes:
+    - Many functions use Matplotlib for plotting.
+    - Optional `save_path` parameters allow exporting plots or tables.
+    - `show=True` can be used to visualize plots interactively.
+"""
+
 import numpy as np
 from utils import last_nonzero_index, exponential_moving_average
 from data_handler import load_all_benchmarks, get_returns_path
 from configs import ENV_CONFIG
 from typing import List, Optional
 from collections import defaultdict
-import pandas as pd
 from matplotlib.ticker import ScalarFormatter
 import os
 import matplotlib.pyplot as plt 
@@ -23,18 +40,44 @@ def plot_posterior_metrics(
     show: bool = False
 ) -> None:
     """
-    Plot boxplots of cumulative regret and episodes to solve for a given environment using BQMS.
-    Optionally formats the y-axis with scientific notation for paper-friendly presentation.
+    Generate boxplots for OPS-VBQN posterior metrics in a specified environment.
+
+    This function plots two side-by-side boxplots:
+        1. Cumulative regret
+        2. Episodes to solve
+
+    Data is aggregated across specified random seeds and filtered
+    by a list of posterior sample sizes if provided. Useful for
+    analyzing the variability and performance of OPS-VBQN across
+    different posterior samples.
+
+    Args:
+        env_name (str): Name of the environment (must exist in stored benchmark data).
+        seeds (List[int]): List of seed numbers to include in the plots.
+        posterior_samples_list (Optional[List[int]], optional): 
+            List of posterior sample sizes to include. If None, includes all available.
+        save_path (Optional[str], optional): File path to save the figure. 
+            If None, the figure is not saved.
+        show (bool, optional): Whether to display the figure interactively. 
+            Defaults to False.
+
+    Raises:
+        ValueError: If no OPS-VBQN data exists for the specified environment.
+
+    Notes:
+        - Assumes benchmark data is loaded via `load_all_benchmarks()`.
+        - Each seed should have `cumulative_regret` and `episodes_to_solve` metrics.
+        - Boxplots use consistent styling for publications or presentations.
     """
     all_data = load_all_benchmarks()
 
-    if env_name not in all_data or "BQMS" not in all_data[env_name]:
-        raise ValueError(f"No BQMS data found for environment '{env_name}'.")
+    if env_name not in all_data or "OPS-VBQN" not in all_data[env_name]:
+        raise ValueError(f"No OPS-VBQN data found for environment '{env_name}'.")
 
-    bqms_data = all_data[env_name]["BQMS"]
+    ops_vbqn_data = all_data[env_name]["OPS-VBQN"]
     grouped_data = defaultdict(lambda: {'cumulative_regret': [], 'episodes_to_solve': []})
 
-    for key, seed_data in bqms_data.items():
+    for key, seed_data in ops_vbqn_data.items():
         try:
             sample_size = int(key)  # expects keys like "400", not "posterior_400"
         except ValueError:
@@ -128,8 +171,34 @@ def plot_learning_curves(
     bootstrap_heads: Optional[int] = None
 ) -> plt.Figure:
     """
-    Plots smoothed learning curves (mean ± std) for multiple algorithms in a single environment.
-    Publication-ready version with automatic 10^n axis formatting.
+    Plot smoothed learning curves (mean ± std) for multiple RL algorithms in a single environment.
+
+    This function generates a publication-ready figure showing the learning
+    performance of each algorithm across multiple seeds. The curves are
+    smoothed using an exponential moving average, and the standard deviation
+    is plotted as a shaded region. Optionally, data for OPS-VBQN and 
+    BootstrapDQN can include posterior sample size or number of bootstrap heads.
+
+    Args:
+        env_name (str): Name of the environment.
+        alg_names (List[str]): List of algorithm names to include in the plot.
+        seed_list (List[int]): List of seed numbers to aggregate results.
+        upper_reward (int): Maximum reward value for clipping the shaded region.
+        lower_reward (int): Minimum reward value for clipping the shaded region.
+        smooth_factor (float, optional): Smoothing factor for exponential moving average. Defaults to 0.99.
+        save_path (Optional[str], optional): File path to save the figure. If None, figure is not saved.
+        show (bool, optional): Whether to display the figure interactively. Defaults to False.
+        posterior_samples (Optional[int], optional): Number of posterior samples for OPS-VBQN (used for labeling).
+        bootstrap_heads (Optional[int], optional): Number of bootstrap heads for BootstrapDQN (used for labeling).
+
+    Returns:
+        plt.Figure: Matplotlib Figure object containing the plotted learning curves.
+
+    Notes:
+        - Automatically formats the x-axis using scientific notation (10^n) for publication.
+        - Curves are smoothed using an exponential moving average.
+        - If no data is available for a particular algorithm or seed, it is skipped with a printed message.
+        - Uses color-coding and transparency for clarity in multi-algorithm plots.
     """
     fig, ax = plt.subplots(figsize=(8, 5))  # Paper-friendly size
 
@@ -161,14 +230,18 @@ def plot_learning_curves(
         y_upper = np.clip(smoothed_mean + smoothed_std, None, upper_reward)
         y_lower = np.clip(smoothed_mean - smoothed_std, lower_reward, None)
 
-        if alg == "BQMS" and posterior_samples is not None:
+        if alg == "OPS-VBQN" and posterior_samples is not None:
             label_name = f"{alg}, N={posterior_samples}"
         elif alg == "BootstrapDQN" and bootstrap_heads is not None:
             label_name = f"Bootstrapped DQN, K={bootstrap_heads}"
         else:
             label_name = alg
 
-        ax.plot(x, smoothed_mean, label=label_name, color=color_map[alg], linewidth=0.8)
+        if alg == "OPS-VBQN":
+            ax.plot(x, smoothed_mean, label=label_name, color=color_map[alg], linewidth=1.4)
+        else:
+            ax.plot(x, smoothed_mean, label=label_name, color=color_map[alg], linewidth=0.8)
+
         ax.fill_between(x, y_lower, y_upper, color=color_map[alg], alpha=0.15)
 
     # Axis labels
@@ -207,15 +280,40 @@ def plot_learning_curves(
 
 
 def generate_latex_table(
-    seeds,
-    use_latex=True,
-):
+    seeds: List[int],
+    use_latex: Optional[bool] = True,
+    ) -> str:
     """
-    Generate a single LaTeX table with all 3 metrics
-    (Benchmark, Cumulative Regret, Episodes to Solve)
-    across all 4 environments and algorithms.
+    Generate a LaTeX-formatted table summarizing benchmark results across 
+    multiple environments and algorithms.
 
-    Cumulative regret will be scaled by 10^3.
+    The table includes three metrics:
+        1. Benchmark score
+        2. Cumulative regret (scaled by 10^3)
+        3. Episodes to solve
+
+    Data is aggregated across the specified seeds. For each metric, the mean 
+    and standard deviation are calculated and formatted in LaTeX-friendly 
+    notation (mean ± std). Missing data for any seed results in "N/A" 
+    for that environment/algorithm combination.
+
+    Args:
+        seeds (list of int): List of seed numbers to include in the table.
+        use_latex (bool, optional): If True, format values for LaTeX with 
+            math mode and \pm; otherwise, use plain text. Defaults to True.
+
+    Returns:
+        str: A string containing the full LaTeX tabular environment with 
+            the aggregated results.
+
+    Notes:
+        - Algorithms included are DQN, BootstrapDQN (with all K values found),
+          and OPS-VBQN (with all N values found).
+        - Table sections are grouped by metric: Benchmark, Cumulative Regret, 
+          and Episodes to Solve.
+        - Cumulative regret values are scaled by 10^3 for readability.
+        - Uses `\toprule`, `\midrule`, and `\bottomrule` for professional 
+          table formatting.
     """
 
     all_data = load_all_benchmarks()
@@ -230,9 +328,9 @@ def generate_latex_table(
         for alg, runs in env.items() if alg == "BootstrapDQN"
         for k in runs.keys()
     })]
-    algs += [("BQMS", n) for n in sorted({
+    algs += [("OPS-VBQN", n) for n in sorted({
         int(n) for env in all_data.values()
-        for alg, runs in env.items() if alg == "BQMS"
+        for alg, runs in env.items() if alg == "OPS-VBQN"
         for n in runs.keys()
     })]
 
@@ -274,7 +372,7 @@ def generate_latex_table(
     lines.append("\\midrule")
     for alg, param in algs:
         row_label = "DQN" if alg == "DQN" else (
-            f"Bootstrapped DQN, K={param}" if alg == "BootstrapDQN" else f"BQMS, N={param}"
+            f"Bootstrapped DQN, K={param}" if alg == "BootstrapDQN" else f"OPS-VBQN, N={param}"
         )
         row = [row_label]
         for env in envs:
@@ -288,7 +386,7 @@ def generate_latex_table(
     lines.append("\\midrule")
     for alg, param in algs:
         row_label = "DQN" if alg == "DQN" else (
-            f"Bootstrapped DQN, K={param}" if alg == "BootstrapDQN" else f"BQMS, N={param}"
+            f"Bootstrapped DQN, K={param}" if alg == "BootstrapDQN" else f"OPS-VBQN, N={param}"
         )
         row = [row_label]
         for env in envs:
@@ -302,7 +400,7 @@ def generate_latex_table(
     lines.append("\\midrule")
     for alg, param in algs:
         row_label = "DQN" if alg == "DQN" else (
-            f"Bootstrapped DQN, K={param}" if alg == "BootstrapDQN" else f"BQMS, N={param}"
+            f"Bootstrapped DQN, K={param}" if alg == "BootstrapDQN" else f"OPS-VBQN, N={param}"
         )
         row = [row_label]
         for env in envs:
@@ -317,16 +415,30 @@ def generate_latex_table(
 
 
 
-
-
-
 def save_latex_table_pdf(seeds: List[int], save_path: str, show: bool = False) -> None:
     """
-    Save a LaTeX table into a compiled PDF using pdflatex.
+    Generate a LaTeX table of RL benchmark results and save it as a compiled PDF.
+
+    This function uses `generate_latex_table` to create a LaTeX tabular 
+    environment for the specified seeds, compiles it with `pdflatex`, and 
+    saves the resulting PDF to the given path. Optionally, the PDF can be 
+    opened automatically after generation.
 
     Args:
-        latex_table (str): LaTeX tabular environment string (e.g., from generate_latex_table).
-        save_path (str): Path to save the compiled PDF.
+        seeds (List[int]): List of seed numbers to include in the table.
+        save_path (str): Path where the compiled PDF should be saved.
+        show (bool, optional): If True, automatically open the PDF after 
+            generation. Defaults to False.
+
+    Raises:
+        RuntimeError: If `pdflatex` fails to compile the LaTeX source.
+
+    Notes:
+        - Requires a working LaTeX installation with `pdflatex` available in 
+          the system PATH.
+        - The generated LaTeX document uses the `article` class and includes 
+          packages `booktabs`, `amsmath`, and `amssymb`.
+        - The table is formatted with professional spacing and booktabs rules.
     """
     latex_table = generate_latex_table(seeds, use_latex=True)
 
@@ -342,33 +454,34 @@ def save_latex_table_pdf(seeds: List[int], save_path: str, show: bool = False) -
     \end{document}
     """ % latex_table
 
-    save_path = Path(save_path).resolve()
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tex_file = Path(tmpdir) / "table.tex"
-        pdf_file = tex_file.with_suffix(".pdf")
+    if save_path != None:
+        save_path = Path(save_path).resolve()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tex_file = Path(tmpdir) / "table.tex"
+            pdf_file = tex_file.with_suffix(".pdf")
 
-        # Write LaTeX source
-        tex_file.write_text(tex_template)
+            # Write LaTeX source
+            tex_file.write_text(tex_template)
 
-        # Run pdflatex
-        try:
-            subprocess.run(
-                ["pdflatex", "-interaction=nonstopmode", str(tex_file)],
-                cwd=tmpdir,
-                check=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-        except subprocess.CalledProcessError:
-            raise RuntimeError("pdflatex failed. Please check your LaTeX installation.")
+            # Run pdflatex
+            try:
+                subprocess.run(
+                    ["pdflatex", "-interaction=nonstopmode", str(tex_file)],
+                    cwd=tmpdir,
+                    check=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            except subprocess.CalledProcessError:
+                raise RuntimeError("pdflatex failed. Please check your LaTeX installation.")
 
-        # Copy compiled PDF to target
-        save_path.parent.mkdir(parents=True, exist_ok=True)
-        pdf_file.replace(save_path)
+            # Copy compiled PDF to target
+            save_path.parent.mkdir(parents=True, exist_ok=True)
+            pdf_file.replace(save_path)
 
-    print(f"✅ PDF successfully generated at {save_path}")
+        print(f"PDF successfully generated at {save_path}")
     # Open PDF if requested
-    if show:
+    if show and save_path != None:
         if sys.platform.startswith("darwin"):  # macOS
             subprocess.run(["open", str(save_path)])
         elif sys.platform.startswith("win"):  # Windows

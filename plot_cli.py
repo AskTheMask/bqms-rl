@@ -1,3 +1,27 @@
+"""
+plotting.py
+
+Script to generate plots and result tables from RL experiments.
+
+This script supports three types of operations:
+
+1. `learning_curve`:
+    - Plots learning curves for all algorithms on a specified environment.
+    - Can optionally smooth curves and include posterior/bootstrapped samples.
+
+2. `posterior_metrics`:
+    - Plots boxplots or other statistics across multiple posterior samples.
+    - Requires a list of posterior sample sizes to include.
+
+3. `results_table`:
+    - Generates a LaTeX table summarizing benchmark results.
+    - Can optionally save and display the table as a PDF.
+
+Usage:
+    python plotting.py --type learning_curve --env_id CartPole-v1 --num_sample 5 --seeds 3
+"""
+
+
 from dataclasses import dataclass
 from typing import List, Optional
 from utils import validate_args, get_random_seeds
@@ -7,43 +31,54 @@ import tyro
 
 @dataclass
 class Args:
-    type: str  # "learning_curve", "posterior_metrics", "results_table"
-    
-    # Common args
-    save_path: Optional[str] = None 
+    """Command-line arguments for plotting RL experiment results.
+
+    Attributes:
+        type (str): Type of plot or operation. One of "learning_curve",
+            "posterior_metrics", "results_table".
+
+        save_path (Optional[str]): Path to save generated plots or tables.
+        seeds (int): Number of random seeds to include. Defaults to 1.
+
+        bootstrap_head (Optional[int]): Head index for bootstrapped DQN
+            when plotting learning curves.
+        num_sample (Optional[int]): Number of posterior samples for OPS-VBQN
+            when plotting learning curves.
+
+        num_samples_list (Optional[List[int]]): List of posterior samples
+            to include when plotting posterior metrics.
+
+        env_id (Optional[str]): Environment ID for plotting learning curves
+            or posterior metrics.
+        show (bool): Whether to display the plot/table immediately. Defaults to False.
+    """
+    type: str
+    save_path: Optional[str] = None
     seeds: int = 1
-
-
-    # For learning_curve
-    env_id: Optional[str] = None
     bootstrap_head: Optional[int] = None
     num_sample: Optional[int] = None
-
-    # For box_plot
-    num_samples_list: Optional[List[int]] = None  # list of samples to include in the boxplot
-
-    # For boxplot and learning_curve
+    num_samples_list: Optional[List[int]] = None
+    env_id: Optional[str] = None
     show: bool = False
-
 
 
 if __name__ == "__main__":
     args = tyro.cli(Args)
 
-    # validate seeds (all plot types)
+    # Validate seeds
     selected_seeds = get_random_seeds(args.seeds)
 
-    # validate environment only if needed
+    # Validate environment if relevant
     if args.type in ["learning_curve", "posterior_metrics"]:
         if args.env_id not in ENVIRONMENTS:
             raise ValueError(f"Invalid environment '{args.env_id}'. Must be one of {ENVIRONMENTS}.")
-    
+        
+    # Validate posterior sample list if needed
     if args.type == "posterior_metrics":
         if not args.num_samples_list or len(args.num_samples_list) == 0:
             raise ValueError("a list of num_samples must be provided for posterior_metrics plots.")
 
-  
-
+    # Plot according to type
     if args.type == "learning_curve":
         config = ENV_CONFIG[args.env_id]
         plot_learning_curves(
