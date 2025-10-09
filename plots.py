@@ -233,9 +233,9 @@ def plot_learning_curves(
             label_name = alg
 
         if alg == "OPS-VBQN":
-            ax.plot(x, smoothed_mean, label=label_name, color=color_map[alg], linewidth=2.4)
+            ax.plot(x, smoothed_mean, label=label_name, color=color_map[alg], linewidth=3.2) 
         else:
-            ax.plot(x, smoothed_mean, label=label_name, color=color_map[alg], linewidth=0.8)
+            ax.plot(x, smoothed_mean, label=label_name, color=color_map[alg], linewidth=0.8)  
 
         ax.fill_between(x, y_lower, y_upper, color=color_map[alg], alpha=0.15)
 
@@ -255,7 +255,7 @@ def plot_learning_curves(
     ax.spines['right'].set_visible(False)
 
     # Legend
-    ax.legend(fontsize=10, loc="best", frameon=False)
+    ax.legend(fontsize=16, loc="lower right", frameon=False)
 
     # Tick font size
     ax.tick_params(labelsize=12)

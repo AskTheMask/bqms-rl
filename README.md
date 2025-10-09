@@ -107,8 +107,6 @@ All plots and PDF generation are handled by `plot_cli.py`.
 # Plot learning curves for DQN, OPS-VBQN with 800 posterior samples and Bootstrapped DQN with 4 bootstrap heads for the CartPole-v1 environment  using 3 seeds
 python plot_cli.py --type learning_curve --env-id CartPole-v1 --num_sample 800 --bootstrap_head 4 --seeds 3 --show
 
-
-
 # Plots Episodes_to_solve and cumulative regret boxplot for the CartPole-v1 environment using 1, 100 and 200 posterior samples and 3 seeds
 python plot_cli.py --type posterior_metrics --env-id CartPole-v1 --num_samples_list 1 100 200 --seeds 3 --show
 
