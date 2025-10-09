@@ -90,7 +90,7 @@ class Agent:
         """
         Performs a single optimization step on the policy network using a mini-batch of transitions.
 
-        If the network is a bootstrapped DQN with multiple heads, `head_idx` selects which head to update.
+        If the network is a bootstrapped DQN network with multiple heads, `head_idx` selects which head to update.
         Otherwise, the standard DQN head is used. The function computes the TD target and performs a 
         gradient descent step to minimize the loss between current Q-values and target Q-values.
 
@@ -112,7 +112,7 @@ class Agent:
             None
         """
 
-        # Unpack transitions — mask isn't needed here because filtering already done
+        # Unpack transitions
         states, actions, next_states, rewards, terminated, _ = zip(*mini_batch)
 
         states = torch.stack(states)
@@ -307,14 +307,11 @@ class Agent:
         - PyTorch CPU and CUDA random generators
         - The environment's random number generators for actions and observations
 
-        Parameters
-        ----------
-        seed : int
-            The integer seed to use for all random number generators.
-        
-        Returns
-        -------
-        None
+        Args:
+            seed (int): The integer seed to use for all random number generators.
+
+        Returns:
+            None
         """
 
         # Seed Python, NumPy, and PyTorch
@@ -342,14 +339,14 @@ class Agent:
         Train the agent on the environment for a given number of steps.
 
         Implements epsilon-greedy exploration, experience replay, and target network updates.
-        Tracks episodic rewards, cumulative regret, and the number of episodes required to
-        reach a reward threshold. Saves the trained model upon completion.
+        Tracks episodic rewards, cumulative regret, and the number of episodes required for the
+        agent to consistently reach a specified reward threshold (achieved in 5 consecutive episodes).
+        Saves the trained model upon completion.
 
         Args:
             max_steps (int): Total number of environment steps to train for.
-            max_episodes (int): Maximum number of episodes to run during training.
-                Used to calculate cumulative regret and to check if the reward threshold was reached.
-            reward_limit (int): Reward threshold used to determine when the task is considered solved.
+            max_episodes (int): Maximum number of episodes considered when computing cumulative regret.
+            reward_limit (int): Reward threshold that defines when the task is considered solved.
             seed (int): Random seed for reproducibility.
             num_samples (Optional[int], default=None): Number of samples for OPS-VBQN action selection (if applicable).
             bootstrap_heads (Optional[int], default=None): Number of bootstrap heads for BootstrapDQN (if applicable).
@@ -357,9 +354,11 @@ class Agent:
         Returns:
             tuple[np.ndarray, int, float]: A tuple containing:
                 - episodic_rewards (np.ndarray): Array of total rewards collected per episode.
-                - episodes_to_solve (int): Number of episodes required to reach the reward limit.
-                If the reward limit is not reached, returns `max_episodes`.
-                - final_cumulative_regret (float): Cumulative regret up to the episode when the task was considered solved.
+                - episodes_to_solve (int): Number of episodes required to reach the reward threshold
+                for 5 consecutive episodes. If the threshold is not met within `max_episodes`,
+                `max_episodes` is returned.
+                - final_cumulative_regret (float): Total cumulative regret up to the episode when the
+                task was considered solved, or up to `max_episodes` if the task was not solved earlier.
         """
 
         # Get the number of states and actions
@@ -482,27 +481,23 @@ class Agent:
             bootstrap_heads: Optional[int] = None
         ) -> float:
         """
-        Train the agent on the environment for a given number of steps.
+        Evaluate a trained agent on the environment for a given number of episodes.
 
-        Implements epsilon-greedy exploration, experience replay, and target network updates.
-        Tracks episodic rewards, cumulative regret, and the number of episodes required to
-        reach a reward threshold. Saves the trained model upon completion.
+        This method loads a previously trained policy and runs it in evaluation mode
+        without further training. It supports evaluation with posterior sampling
+        (for OPS-VBQN) or bootstrap heads (for bootstrapped DQN).
+
 
         Args:
-            max_steps (int): Total number of environment steps to train for.
-            max_episodes (int): Maximum number of episodes to run during training.
-                Used to calculate cumulative regret and to check if the reward threshold was reached.
-            reward_limit (int): Reward threshold used to determine when the task is considered solved.
+            episodes (int): Number of evaluation episodes to run.
             seed (int): Random seed for reproducibility.
-            num_samples (Optional[int], default=None): Number of samples for OPS-VBQN action selection (if applicable).
-            bootstrap_heads (Optional[int], default=None): Number of bootstrap heads for BootstrapDQN (if applicable).
+            num_samples (Optional[int], default=None): Number of posterior samples 
+                for OPS-VBQN action selection (if applicable).
+            bootstrap_heads (Optional[int], default=None): Number of bootstrap heads 
+                for BootstrapDQN (if applicable).
 
         Returns:
-            Tuple[np.ndarray, int, float]: A tuple containing:
-                - episodic_rewards (np.ndarray): Array of total rewards collected per episode.
-                - episodes_to_solve (int): Number of episodes required to reach the reward limit.
-                If the reward limit is not reached, returns `max_episodes`.
-                - final_cumulative_regret (float): Cumulative regret up to the episode when the task was considered solved.
+            float: The average total reward obtained per episode during evaluation.
         """
 
         # Get the number of states and actions
@@ -558,8 +553,8 @@ class Agent:
         """
         Runs benchmark training and evaluation across multiple random seeds.
 
-        For each seed, trains the agent using the specified environment and hyperparameters,
-        evaluates the learned policy, and saves episodic returns and benchmark results.
+        For each seed, the agent is trained using the specified environment and hyperparameters,
+        evaluated using the learned policy, and saves the episodic returns and benchmark results.
 
         Args:
             seeds (List[int]): List of random seeds to run the benchmark across.

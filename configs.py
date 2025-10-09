@@ -5,17 +5,6 @@ Defines environment- and algorithm-specific configuration settings for the
 Reinforcement Learning Benchmark Suite. Handles creation of directory
 structures for saving models and results, and provides a helper function
 to instantiate agents with environment-appropriate hyperparameters.
-
-Contents:
-    - setup_project_dirs: Creates folder hierarchy for models and benchmark data.
-    - ENVIRONMENTS / ALGORITHMS: Lists of supported environments and algorithms.
-    - ENV_CONFIG: Environment-specific benchmarking and training limits.
-    - COMMON_CONFIG / ENV_SPECIFIC: Default and environment-specific agent configs.
-    - create_agent: Utility to initialize an Agent with proper settings.
-
-Example:
-    from configs import create_agent, ENVIRONMENTS
-    agent = create_agent("CartPole-v1", DQN, make_env("CartPole-v1"))
 """
 
 
@@ -85,7 +74,7 @@ def setup_project_dirs(
     print("Folder structure ready!")
 
 
-# List of environments and algorithms
+# List of supported environments and algorithms
 ENVIRONMENTS = ["CartPole-v1", "LunarLander-v3", "Taxi-v3", "Acrobot-v1"]
 ALGORITHMS = ["DQN", "OPS-VBQN", "BootstrapDQN"]
 ENV_CONFIG = {
@@ -173,7 +162,7 @@ ENV_SPECIFIC = {
 }
 
 
-def create_agent(env_name: str, model_class: Type[torch.nn.Module], env_instance: gym.env) -> Agent:
+def create_agent(env_name: str, model_class: Type[torch.nn.Module], env_instance: gym.Env) -> Agent:
     """
     Instantiates an Agent with environment-specific configuration.
 

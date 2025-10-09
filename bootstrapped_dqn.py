@@ -6,9 +6,6 @@ across one or more Gym environments.
 
 This module uses Tyro for argument parsing and relies on shared configuration
 utilities to manage environments, agent creation, and experiment reproducibility.
-
-Example:
-    python bootstrapped_dqn.py --env-ids CartPole-v1 Acrobot-v1 --bootstrap-heads 4 8 --seeds 3
 """
 
 

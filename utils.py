@@ -37,7 +37,7 @@ def last_nonzero_index(arr: np.ndarray) -> int:
         arr (np.ndarray): Input array.
 
     Returns:
-        int: Index of the last non-zero element. If all zero, returns len(arr).
+        int: Index of the last non-zero element. If all elements are zero, returns len(arr).
     """
     rev_nz = np.flatnonzero(arr[::-1])
     return len(arr) - rev_nz[0] if rev_nz.size > 0 else len(arr)

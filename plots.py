@@ -1,12 +1,7 @@
 """
 plots.py
 
-Functions for visualizing Reinforcement Learning experiment results, including:
-- Learning curves over episodes
-- Posterior distribution metrics (e.g., rewards, uncertainties)
-- Boxplots for performance comparison
-- Exporting results tables as LaTeX PDFs
-
+Functions for visualizing Reinforcement Learning experiment results.
 This module is intended to support analysis and presentation of OPS-VBQN,
 BootstrapDQN, or other RL algorithms' results.
 
@@ -238,7 +233,7 @@ def plot_learning_curves(
             label_name = alg
 
         if alg == "OPS-VBQN":
-            ax.plot(x, smoothed_mean, label=label_name, color=color_map[alg], linewidth=1.4)
+            ax.plot(x, smoothed_mean, label=label_name, color=color_map[alg], linewidth=2.4)
         else:
             ax.plot(x, smoothed_mean, label=label_name, color=color_map[alg], linewidth=0.8)
 
@@ -307,8 +302,8 @@ def generate_latex_table(
             the aggregated results.
 
     Notes:
-        - Algorithms included are DQN, BootstrapDQN (with all K values found),
-          and OPS-VBQN (with all N values found).
+        - Algorithms included are DQN, BootstrapDQN (with all K values found (bootstrap heads)),
+          and OPS-VBQN (with all N values found (posterior samples)).
         - Table sections are grouped by metric: Benchmark, Cumulative Regret, 
           and Episodes to Solve.
         - Cumulative regret values are scaled by 10^3 for readability.

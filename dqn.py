@@ -6,16 +6,6 @@ Command-line interface for training and benchmarking DQN agents on Gym environme
 This script allows specifying environment IDs and the number of random seeds to run.
 For each environment, it creates a Gym environment instance, instantiates a DQN agent,
 and runs benchmarking according to environment-specific configuration settings.
-
-It handles:
-- Argument parsing using Tyro
-- Validation of selected environments
-- Setup of project directories for models and benchmark data
-- Agent creation with environment-specific hyperparameters
-- Benchmarking and evaluation of the agent, saving episodic returns and metrics
-
-Example:
-    python dqn.py --env-ids CartPole-v1 Acrobot-v1 --seeds 3
 """
 
 import tyro

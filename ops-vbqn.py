@@ -5,9 +5,6 @@ Script to run OPS-VBQN agents on selected environments.
 
 This script allows running OPS-VBQN (Bayesian Q-Network) agents on multiple
 environments, with configurable posterior sample sizes and random seeds.
-
-Usage:
-    python ops-vbqn.py --env_ids CartPole-v1 MountainCar-v0 --num_samples 1 5 --seeds 3
 """
 
 import tyro

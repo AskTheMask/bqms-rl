@@ -252,7 +252,7 @@ def save_seed_data(
         cumulative_regret (Optional[float], default=None): Cumulative regret
             for the seed.
         episodes_to_solve (Optional[int], default=None): Number of episodes
-            required to reach the reward threshold.
+            the agent used to solve the task.
         posterior_samples (Optional[int], default=None): Number of posterior samples
             for OPS-VBQN (if applicable).
         bootstrap_heads (Optional[int], default=None): Number of bootstrap heads
