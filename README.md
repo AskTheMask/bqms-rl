@@ -33,7 +33,7 @@ pip install -r requirements.txt
 
 ## Project Structure
 ```
-project/
+ops-vbqn-rl/
 ├─ configs.py           # Environment & algorithm configurations
 ├─ data_handler.py      # Save/load training results and models
 ├─ memory.py            # Replay buffer implementation
